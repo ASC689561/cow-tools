@@ -4,6 +4,12 @@ from consul import Check
 
 st.header("Consul Tools")
 
+consul_endpoint = st.sidebar.text_input("Consul Endpoint", 'localhost:8500')
+host, port = consul_endpoint.split(':')
+port = int(port)
+
+c = consul.Consul(host=host, port=port)
+
 
 class UI:
 
@@ -14,7 +20,6 @@ class Register(UI):
     name = 'Register Service'
 
     def __init__(self):
-        c = consul.Consul()
         svc = c.agent.services()
         selected_service = st.selectbox("Existing service", list(svc))
 
@@ -32,7 +37,6 @@ class Register(UI):
 
     def run(self):
         if self.register_btn:
-            c = consul.Consul(verify=False)
             check = Check.http(self.txt_url, interval=f'{self.num_interval}s', timeout=f'{self.num_timeout}s')
             c.agent.service.register(name=self.txt_name,
                                      service_id=self.txt_name,
@@ -43,7 +47,6 @@ class ListService(UI):
     name = 'List Services'
 
     def __init__(self):
-        c = consul.Consul()
         st.subheader("Services")
         st.write(c.agent.services())
 
@@ -58,14 +61,13 @@ class AlertConfig(UI):
     name = 'Alerts'
 
     def get_value(self, key, default):
-        c = consul.Consul()
         index, value = c.kv.get(key)
         if not value:
             return default
         return value['Value'].decode()
 
     def __init__(self):
-        self.change_threshold = st.number_input("change-threshold", 10, 120, 20)
+        self.change_threshold = st.number_input("Change Threshold", 10, 120, 20)
         self.enabled = st.checkbox("Slack Enabled", self.get_value('consul-alerts/config/notifiers/slack/enabled', 'True'))
         self.slack_detailed = st.checkbox("Slack Detailed", self.get_value('consul-alerts/config/notifiers/slack/detailed', 'True'))
 
@@ -75,7 +77,6 @@ class AlertConfig(UI):
         self.btn_register = st.button("Register")
 
     def run(self):
-        c = consul.Consul()
         if self.btn_register:
             c.kv.put('consul-alerts/config/checks/change-threshold', str(self.change_threshold))
             c.kv.put('consul-alerts/config/notifiers/slack/enabled', str(self.enabled))
@@ -89,13 +90,11 @@ class DeleteService(UI):
     name = 'Delete Services'
 
     def __init__(self):
-        c = consul.Consul()
         all_svc = list(c.agent.services())
         self.service = st.multiselect("Services", all_svc)
         self.delete_btn = st.button("Delete")
 
     def run(self):
-        c = consul.Consul()
         if self.delete_btn:
             for v in self.service:
                 st.write(v)
