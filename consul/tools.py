@@ -4,7 +4,7 @@ from consul import Check
 
 st.header("Consul Tools")
 
-consul_endpoint = st.sidebar.text_input("Consul Endpoint", 'localhost:8500')
+consul_endpoint = st.sidebar.text_input("Consul Endpoint", '10.0.6.21:8500')
 host, port = consul_endpoint.split(':')
 port = int(port)
 
@@ -26,7 +26,6 @@ class Register(UI):
         if selected_service:
             self.txt_name = st.text_input("Service ID", svc[selected_service]['ID'])
             self.txt_url = st.text_input("Service URL", svc[selected_service]['Address'])
-            checks = c.health.checks(selected_service)
         else:
             self.txt_name = st.text_input("Service Name", "test-service")
             self.txt_url = st.text_input("Service URL", 'http://www.google.com')
@@ -41,6 +40,40 @@ class Register(UI):
             c.agent.service.register(name=self.txt_name,
                                      service_id=self.txt_name,
                                      address=self.txt_url, check=check)
+
+
+class RegisterServices(UI):
+    name = 'Register Services'
+
+    def __init__(self):
+        self.services = st.text_area("Service Name", """SVC	https://monitor.misa.com.vn/service/ServiceWeb.svc""")
+
+        self.num_interval = st.number_input("Interval(s)", 5, 300, 30)
+        self.num_timeout = st.number_input("Timeout(s)", 5, 120, 60)
+        self.register_btn = st.button("Register")
+        self.force = st.checkbox("Override existing")
+
+    def run(self):
+        all_svc = list(c.agent.services())
+        st.write(all_svc)
+
+        if self.register_btn:
+            for v in self.services.split('\n'):
+                arr = v.split('\t')
+                if len(arr) != 2:
+                    st.warning("Line not valid: {}".format(v))
+
+                name, url = arr
+                if not name or not url:
+                    st.warning("Line not valid: {}".format(v))
+
+                if name in all_svc and not self.force:
+                    st.warning("Ignore: {}".format(name))
+                    continue
+
+                check = Check.http(url, interval=f'{self.num_interval}s', timeout=f'{self.num_timeout}s')
+                c.agent.service.register(name=name, service_id=name, address=url, check=check)
+                st.success("Registered: {}".format(name))
 
 
 class ListService(UI):
@@ -91,14 +124,17 @@ class DeleteService(UI):
 
     def __init__(self):
         all_svc = list(c.agent.services())
+        all_svc.append("ALL")
         self.service = st.multiselect("Services", all_svc)
         self.delete_btn = st.button("Delete")
 
     def run(self):
         if self.delete_btn:
-            for v in self.service:
-                st.write(v)
-                c.agent.service.deregister(v)
+            if 'ALL' in self.service:
+                for v in list(c.agent.services()):
+                    x = c.agent.service.deregister(v)
+                    st.write(x)
+                    st.success("Deleted: " + v)
 
 
 def get_subclasses(cls):
